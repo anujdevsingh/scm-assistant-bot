@@ -1,0 +1,21 @@
+# secrets - never commit keys
+.env
+.env.*
+*.key
+*api_key*
+*apikey*
+credentials.json
+secrets/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.ruff_cache/
+
+# os noise
+Thumbs.db
+.DS_Store
+
+# assignment brief - not for the public repo
+case-study.pdf
