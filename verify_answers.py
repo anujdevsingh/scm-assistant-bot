@@ -1,13 +1,6 @@
-"""Sanity-check the compiled knowledge against independent recomputation.
-
-Recomputes the answer to each of the five case-study questions straight from
-the CSV (separately from compile_knowledge.py) and asserts the figures appear
-in knowledge/network_analytics.md. Prints the answer key for this data cut.
-
-Note: the sample answers printed in the case-study PDF were computed from a
-different cut of the data (different totals, different rankings). The provided
-CSV is the authoritative source here, so the bot is validated against it.
-"""
+"""Recomputes the five case-study answers straight from the CSV and asserts
+they appear in knowledge/network_analytics.md. The PDF's sample answers come
+from a different data cut, so the provided CSV is the source of truth here."""
 
 from pathlib import Path
 

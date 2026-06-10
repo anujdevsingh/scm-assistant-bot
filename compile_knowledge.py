@@ -1,17 +1,5 @@
-"""Compile the supplier PO register into retrieval-ready knowledge documents.
-
-Reads the raw purchase-order CSV and produces two markdown files that get
-loaded into the Flowise document store alongside the governance policy PDF:
-
-  knowledge/network_analytics.md   - network-level rollups, each one evaluated
-                                     against the policy rule that governs it
-  knowledge/supplier_profiles.md   - one profile card per supplier
-
-Usage:
-  python compile_knowledge.py [path/to/csv] [output_dir]
-
-Re-run whenever the register changes, then re-upsert the document store.
-"""
+﻿"""Turns the supplier PO register into the markdown knowledge files for the
+document store. Usage: python compile_knowledge.py [csv] [outdir]"""
 
 import sys
 from datetime import datetime
@@ -22,18 +10,17 @@ import pandas as pd
 CSV_PATH = sys.argv[1] if len(sys.argv) > 1 else "supplier_performance_data.csv"
 OUT_DIR = Path(sys.argv[2] if len(sys.argv) > 2 else "knowledge")
 
-# Tier thresholds from the Supplier Governance & Compliance Policy v3.2
-TIER_MIN_OTD = {"Tier-1": 93.0, "Tier-2": 84.0, "Tier-3": 75.0}          # §3.1
-TIER_MAX_DEFECT = {"Tier-1": 0.99, "Tier-2": 2.50, "Tier-3": 4.00}       # §3.2
-TIER_MIN_COMPLIANCE = {"Tier-1": 90, "Tier-2": 75, "Tier-3": 60}         # §2
-TIER_MIN_SUSTAIN = {"Tier-1": 80, "Tier-2": 60, "Tier-3": 45}            # §6.1
-AUDIT_OVERDUE_MONTHS = {"Tier-1": 14, "Tier-2": 7, "Tier-3": 4}          # §7.1
-REGION_CAP_PCT = 45.0                                                     # §5.3
-COUNTRY_CAP_PCT = 25.0                                                    # §5.3
-SWL_COMPLIANCE_FLOOR = 60                                                 # §3.4
-ELTRP_DAYS = 50                                                           # §3.3
+# thresholds from governance policy v3.2 (sections 2-7)
+TIER_MIN_OTD = {"Tier-1": 93.0, "Tier-2": 84.0, "Tier-3": 75.0}
+TIER_MAX_DEFECT = {"Tier-1": 0.99, "Tier-2": 2.50, "Tier-3": 4.00}
+TIER_MIN_COMPLIANCE = {"Tier-1": 90, "Tier-2": 75, "Tier-3": 60}
+TIER_MIN_SUSTAIN = {"Tier-1": 80, "Tier-2": 60, "Tier-3": 45}
+AUDIT_OVERDUE_MONTHS = {"Tier-1": 14, "Tier-2": 7, "Tier-3": 4}
+REGION_CAP_PCT = 45.0
+COUNTRY_CAP_PCT = 25.0
+SWL_COMPLIANCE_FLOOR = 60
+ELTRP_DAYS = 50
 
-# §9 mapping: risk level of a disrupted supplier -> response level
 RESPONSE_BY_RISK = {"Low": "Level 1 - Monitor", "Medium": "Level 2 - Manage", "High": "Level 3 - Activate"}
 
 
@@ -85,7 +72,7 @@ def supplier_rollup(df):
 
 
 def response_level(row):
-    # §9: two simultaneous disruption flags force Level 3 regardless of risk
+    # two simultaneous flags force Level 3 regardless of risk (policy 9)
     if row["n_disruption_types"] >= 2:
         return "Level 3 - Activate (multiple simultaneous disruption flags)"
     return RESPONSE_BY_RISK[row["risk"]]
@@ -107,7 +94,7 @@ def build_analytics(df, sup, as_of):
       "(totals, counts, averages, rankings, threshold breaches). Per-supplier detail lives in "
       "the supplier profile cards; rule definitions live in the policy document.")
 
-    # ---- network overview ----
+
     w("")
     w("## 1. Network Overview")
     w("")
@@ -123,7 +110,7 @@ def build_analytics(df, sup, as_of):
     w(f"- Suppliers with at least one disruption flag recorded in the register: {n_ever}; "
       f"suppliers still carrying a flag in their most recent quarter of activity: {n_now}")
 
-    # ---- regional concentration §5.3 ----
+
     w("")
     w("## 2. Regional & Country Spend Concentration (Policy §5.3)")
     w("")
@@ -154,7 +141,7 @@ def build_analytics(df, sup, as_of):
         flag = " - **BREACH of the 25% country cap (Diversification Plan required within 60 days)**" if pct > COUNTRY_CAP_PCT else " (within the 25% cap)"
         w(f"- {c}: {money(v)} = {pct:.2f}%{flag}")
 
-    # ---- category defect rates §3.2 ----
+
     w("")
     w("## 3. Defect Rate by Product Category (Policy §3.2)")
     w("")
@@ -174,7 +161,7 @@ def build_analytics(df, sup, as_of):
       f"(across {int(cat.iloc[0]['count'])} POs). This {vs_t2} the Tier-2 defect ceiling of "
       f"{TIER_MAX_DEFECT['Tier-2']:.2f}% defined in Policy §3.2.**")
 
-    # ---- SWL §3.4 ----
+
     w("")
     w("## 4. Supplier Watch List - SWL (Policy §3.4)")
     w("")
@@ -199,7 +186,7 @@ def build_analytics(df, sup, as_of):
         for _, s in borderline.sort_values("min_compliance").iterrows():
             w(f"- {s['name']} ({s['Supplier_ID']}, {s['tier']}) - average {s['compliance']:.1f}, lowest recorded {s['min_compliance']:.0f}")
 
-    # ---- volume rebate §4.2 ----
+
     w("")
     w("## 5. Volume Rebate Program Qualification (Policy §4.2)")
     w("")
@@ -224,7 +211,7 @@ def build_analytics(df, sup, as_of):
             for _, s in near.head(8).iterrows():
                 w(f"- {s['name']} ({s['Supplier_ID']}) - OTD {s['otd']:.1f}%, defect {s['defect']:.2f}%, sustainability {s['sustainability']:.0f}")
 
-    # ---- disruption response §9 ----
+
     w("")
     w("## 6. Active Disruptions & Response Levels (Policy §9)")
     w("")
@@ -259,7 +246,7 @@ def build_analytics(df, sup, as_of):
               f"{len(lvl3)} of them require Level 3 - Activate per Policy §9 "
               f"(CPO escalation + alternate supplier at minimum 40% volume).**")
 
-    # ---- audit overdue §7.1 ----
+
     w("")
     w("## 7. Audit Status (Policy §7.1)")
     w("")
@@ -276,7 +263,7 @@ def build_analytics(df, sup, as_of):
         w(f"- {s['name']} ({s['Supplier_ID']}, {s['tier']}) - last audited {s['last_audit']:%Y-%m-%d}, "
           f"{s['audit_months']:.1f} months ago (threshold {AUDIT_OVERDUE_MONTHS[s['tier']]} months)")
 
-    # ---- OTD penalty exposure §4.1 ----
+
     w("")
     w("## 8. OTD Performance & Penalty Exposure (Policy §4.1 / §3.1)")
     w("")
@@ -294,7 +281,7 @@ def build_analytics(df, sup, as_of):
       "70-74.9% -> 5% (Tier-1); 75-79.9% -> 3.5% (Tier-1/2); 80-83.9% -> 2% (Tier-1); "
       "84-86.9% -> 1% (Tier-1); 87% and above -> no penalty.")
 
-    # ---- lead time §3.3 ----
+
     w("")
     w("## 9. Extended Lead Times (Policy §3.3 - ELTRP)")
     w("")
@@ -307,7 +294,7 @@ def build_analytics(df, sup, as_of):
         flag = " - **subject to ELTRP review**" if s["lead_time"] > ELTRP_DAYS else ""
         w(f"- {s['name']} ({s['Supplier_ID']}, {s['tier']}) - average lead time {s['lead_time']:.0f} days{flag}")
 
-    # ---- spend by quarter / category ----
+
     w("")
     w("## 10. Spend Rollups")
     w("")
